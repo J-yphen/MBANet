@@ -14,7 +14,6 @@ from mmseg.datasets import build_dataloader, build_dataset
 from mmseg.models import build_segmentor
 
 import cosnet
-import student_cosnet
 from align_resize import AlignResize
 from zerowaste import ZeroWasteDataset
 from specwaste import SpectralWasteDataset
@@ -25,11 +24,6 @@ def count_total_params(model):
 
 
 def load_any_checkpoint(model, checkpoint_path):
-    ckpt = torch.load(checkpoint_path, map_location='cpu')
-    if isinstance(ckpt, dict) and 'student' in ckpt:
-        msg = model.load_state_dict(ckpt['student'], strict=False)
-        print(f'Loaded student state_dict from KD checkpoint: {msg}')
-        return ckpt
     return load_checkpoint(model, checkpoint_path, map_location='cpu')
 
 
@@ -153,8 +147,6 @@ def parse_args():
         description='mmseg test (and eval) a model')
     parser.add_argument('config', help='test config file path')
     parser.add_argument('checkpoint', help='checkpoint file')
-    parser.add_argument('--teacher-config', default=None, help='teacher config file path for comparison')
-    parser.add_argument('--teacher-checkpoint', default=None, help='teacher checkpoint for comparison')
     parser.add_argument(
         '--aug-test', action='store_true', help='Use Flip and Multi scale aug')
     parser.add_argument('--out', help='output result file in pickle format')
@@ -244,31 +236,15 @@ def main():
         distributed = True
         init_dist(args.launcher, **cfg.dist_params)
 
-    student_result = run_eval_once(cfg, args.checkpoint, args, distributed, tag='Student')
-
-    teacher_result = None
-    if args.teacher_config is not None and args.teacher_checkpoint is not None:
-        teacher_cfg = mmcv.Config.fromfile(args.teacher_config)
-        if args.options is not None:
-            teacher_cfg.merge_from_dict(args.options)
-        if teacher_cfg.get('cudnn_benchmark', False):
-            torch.backends.cudnn.benchmark = True
-        teacher_cfg.model.pretrained = None
-        teacher_cfg.data.test.test_mode = True
-        teacher_result = run_eval_once(
-            teacher_cfg,
-            args.teacher_checkpoint,
-            args,
-            distributed,
-            tag='Teacher')
+    result = run_eval_once(cfg, args.checkpoint, args, distributed, tag='CosNet')
 
     rank, _ = get_dist_info()
     if rank == 0:
-        if student_result is None:
-            raise RuntimeError('No student result generated on rank 0.')
+        if result is None:
+            raise RuntimeError('No result generated on rank 0.')
 
-        outputs = student_result['outputs']
-        dataset = student_result['dataset']
+        outputs = result['outputs']
+        dataset = result['dataset']
         if args.out:
             print(f'\nwriting results to {args.out}')
             mmcv.dump(outputs, args.out)
@@ -283,18 +259,11 @@ def main():
         print('| Model   | Params (M)   | Encoder Params (M)  | mIoU (%)            | Avg Pixel Acc (%)   |')
         print('+---------+--------------+---------------------+---------------------+---------------------+')
         print(
-            f"| Student | {student_result['total_params'] / 1e6:>12.2f} | "
-            f"{student_result['encoder_params'] / 1e6:>19.2f} | "
-            f"{student_result['metrics']['miou']:>19.2f} | "
-            f"{student_result['metrics']['macc']:>19.2f} |"
+            f"| CosNet  | {result['total_params'] / 1e6:>12.2f} | "
+            f"{result['encoder_params'] / 1e6:>19.2f} | "
+            f"{result['metrics']['miou']:>19.2f} | "
+            f"{result['metrics']['macc']:>19.2f} |"
         )
-        if teacher_result is not None:
-            print(
-                f"| Teacher | {teacher_result['total_params'] / 1e6:>12.2f} | "
-                f"{teacher_result['encoder_params'] / 1e6:>19.2f} | "
-                f"{teacher_result['metrics']['miou']:>19.2f} | "
-                f"{teacher_result['metrics']['macc']:>19.2f} |"
-            )
         print('+---------+--------------+---------------------+---------------------+---------------------+')
 
 
