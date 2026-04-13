@@ -1,0 +1,3 @@
+__pycache__/*
+.efficient_test/
+pretrain/model_best.pth.tar
