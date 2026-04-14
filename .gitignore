@@ -3,3 +3,4 @@ __pycache__/*
 pretrain/model_best.pth.tar
 zerowaste_logs
 boundary_ppts.pdf
+spectralwaste_logs

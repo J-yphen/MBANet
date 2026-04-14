@@ -140,17 +140,30 @@ class MLP(nn.Module):
 class BEM(nn.Module):
     def __init__(self, dim):
         super().__init__()
-        self.conv = nn.Conv2d(dim*2, dim, kernel_size=3, stride=1, padding=1)
+        # Boundary-guided feature aggregation:
+        # 1) Build boundary cues via low-frequency subtraction.
+        # 2) Gate contextual features using predicted boundary response.
+        # 3) Fuse identity, gated context, and boundary features.
+        self.edge_conv = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=1, groups=dim, bias=False)
+        self.edge_gate = nn.Conv2d(dim, dim, kernel_size=1, stride=1, padding=0)
+        self.ctx_conv = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=2, dilation=2, groups=dim, bias=False)
+        self.fuse = nn.Conv2d(dim * 3, dim, kernel_size=1, stride=1, padding=0, bias=False)
         self.norm = LayerNorm(dim, eps=1e-6, data_format="channels_first")
         self.act = nn.GELU()
-        self.pool = nn.MaxPool2d(kernel_size=4, stride=4)
+        self.pool = nn.AvgPool2d(kernel_size=4, stride=4)
 
     def forward(self, x):
-        dx = self.pool(x)
-        ex = torch.nn.functional.interpolate(dx, size=x.shape[2:], mode='bilinear') - x
-        x = torch.cat([ex,x], dim=1)
-        x = self.conv(x)
-        x = self.act(x)
-        x = self.norm(x)
+        low = self.pool(x)
+        low = torch.nn.functional.interpolate(low, size=x.shape[2:], mode='bilinear', align_corners=False)
+        edge = x - low
 
-        return x
+        edge = self.act(self.edge_conv(edge))
+        gate = torch.sigmoid(self.edge_gate(edge))
+        ctx = self.act(self.ctx_conv(x))
+
+        fused = torch.cat([x, ctx * gate, edge], dim=1)
+        out = self.fuse(fused)
+        out = self.act(out)
+        out = self.norm(out)
+
+        return out

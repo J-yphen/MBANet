@@ -39,6 +39,13 @@ class COSNet(nn.Module):
             self.stages.append(nn.Sequential(*stage_blocks))
             cur += depths[i]
 
+        self.bem_layers = nn.ModuleList([BEM(self.dims[i]) for i in range(self.num_stages)])
+        self.boundary_heads = nn.ModuleList([
+            nn.Conv2d(self.dims[i], 1, kernel_size=1, stride=1, padding=0)
+            for i in range(self.num_stages)
+        ])
+        self.latest_boundary_logits = None
+
         # self.norm = nn.LayerNorm(self.dims[-1], eps=1e-6)  # Final norm layer
         # self.head = nn.Linear(self.dims[-1], num_classes)
         # self.hdr_layer = BEM(self.dims[-2])
@@ -119,10 +126,21 @@ class COSNet(nn.Module):
 
     def forward_features(self, x):
         feats = []
+        boundary_logits = []
         for i in range(self.num_stages):
             x = self.downsample_layers[i](x)
             x = self.stages[i](x)
+
+            # Boundary-guided enhancement: stage features are refined by BEM,
+            # weighted with stage-specific boundary confidence.
+            bem_feat = self.bem_layers[i](x)
+            b_logit = self.boundary_heads[i](bem_feat)
+            x = x + bem_feat * torch.sigmoid(b_logit)
+
             feats.append(x)
+            boundary_logits.append(b_logit)
+
+        self.latest_boundary_logits = boundary_logits
 
         return feats
 
