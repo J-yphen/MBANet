@@ -3,6 +3,7 @@ import copy
 import os
 import os.path as osp
 import time
+import warnings
 
 import mmcv
 import torch
@@ -24,12 +25,63 @@ from zerowaste import ZeroWasteDataset
 from specwaste import SpectralWasteDataset
 #torch.autograd.set_detect_anomaly(True)
 
+
+def _extract_state_dict(checkpoint_obj):
+    if isinstance(checkpoint_obj, dict):
+        state_dict = checkpoint_obj.get('state_dict', checkpoint_obj)
+        if isinstance(state_dict, dict):
+            return state_dict
+    return {}
+
+
+def _collect_checkpoint_load_stats(model, state_dict, backbone_only=False):
+    model_state = model.state_dict()
+    model_keys = set(model_state.keys())
+
+    if backbone_only:
+        target_keys = {k for k in model_keys if k.startswith('backbone.')}
+    else:
+        target_keys = model_keys
+
+    matched = set()
+    shape_mismatch = []
+    unexpected = []
+
+    for key, value in state_dict.items():
+        mapped_key = key
+        if backbone_only and not key.startswith('backbone.'):
+            candidate = f'backbone.{key}'
+            if candidate in model_keys:
+                mapped_key = candidate
+
+        if mapped_key in target_keys:
+            model_tensor = model_state[mapped_key]
+            if hasattr(value, 'shape') and tuple(value.shape) == tuple(model_tensor.shape):
+                matched.add(mapped_key)
+            else:
+                shape_mismatch.append((mapped_key, tuple(getattr(value, 'shape', ())), tuple(model_tensor.shape)))
+        else:
+            unexpected.append(mapped_key)
+
+    missing = sorted(list(target_keys - matched))
+    return {
+        'matched': len(matched),
+        'total_target': len(target_keys),
+        'missing': missing,
+        'shape_mismatch': shape_mismatch,
+        'unexpected': unexpected,
+    }
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a segmentor')
     parser.add_argument('config', default=None, help='train config file path')
     parser.add_argument('--work-dir', default='zerowaste_logs', help='the dir to save logs and models')
     parser.add_argument(
         '--load-from', help='the checkpoint file to load weights from')
+    parser.add_argument(
+        '--no-print-model',
+        action='store_true',
+        help='do not print the full model architecture in logs')
     parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
     parser.add_argument(
@@ -70,6 +122,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    load_from_meta = None
 
     cfg = Config.fromfile(args.config)
     if args.options is not None:
@@ -87,7 +140,36 @@ def main():
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
     if args.load_from is not None:
-        cfg.load_from = args.load_from
+        checkpoint = torch.load(args.load_from, map_location='cpu')
+        state_dict = _extract_state_dict(checkpoint)
+
+        keys = list(state_dict.keys())
+        has_backbone_keys = any(k.startswith('backbone.') for k in keys)
+        has_seg_head_keys = any(k.startswith('decode_head.') or k.startswith('auxiliary_head.') for k in keys)
+
+        load_from_meta = {
+            'path': args.load_from,
+            'state_dict': state_dict,
+            'is_backbone_only': has_backbone_keys and not has_seg_head_keys,
+        }
+
+        # Backbone-only checkpoints should initialize cfg.model.pretrained,
+        # not cfg.load_from (which expects full segmentor checkpoint keys).
+        if has_backbone_keys and not has_seg_head_keys:
+            cfg.model.pretrained = args.load_from
+            warnings.warn(
+                'Detected backbone-only checkpoint in --load-from; '
+                'using it as model.pretrained and skipping full-model load.'
+            )
+        else:
+            backbone_pretrained = cfg.model.get('pretrained', None) if cfg.get('model', None) else None
+            if backbone_pretrained is not None and osp.abspath(args.load_from) == osp.abspath(backbone_pretrained):
+                warnings.warn(
+                    'Ignoring --load-from because it matches model.pretrained; '
+                    'the file is treated as backbone initialization, not a full segmentation checkpoint.'
+                )
+            else:
+                cfg.load_from = args.load_from
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
     if args.gpu_ids is not None:
@@ -144,7 +226,40 @@ def main():
         train_cfg=cfg.get('train_cfg'),
         test_cfg=cfg.get('test_cfg'))
 
-    logger.info(model)
+    if not args.no_print_model:
+        logger.info(model)
+    else:
+        logger.info('Model architecture printing disabled by --no-print-model')
+
+    if load_from_meta is not None:
+        stats = _collect_checkpoint_load_stats(
+            model,
+            load_from_meta['state_dict'],
+            backbone_only=load_from_meta['is_backbone_only'])
+        logger.info(
+            'Checkpoint loaded from %s (%d/%d target layers matched).',
+            load_from_meta['path'],
+            stats['matched'],
+            stats['total_target'])
+
+        if stats['shape_mismatch']:
+            logger.warning('Found %d shape-mismatched layers while loading %s.',
+                           len(stats['shape_mismatch']), load_from_meta['path'])
+            for key, ckpt_shape, model_shape in stats['shape_mismatch'][:20]:
+                logger.warning('Shape mismatch: %s checkpoint%s vs model%s',
+                               key, ckpt_shape, model_shape)
+            if len(stats['shape_mismatch']) > 20:
+                logger.warning('... and %d more shape-mismatched layers.',
+                               len(stats['shape_mismatch']) - 20)
+
+        if stats['missing']:
+            logger.warning('Found %d model layers not loaded from %s.',
+                           len(stats['missing']), load_from_meta['path'])
+            for key in stats['missing'][:20]:
+                logger.warning('Not loaded: %s', key)
+            if len(stats['missing']) > 20:
+                logger.warning('... and %d more missing layers.',
+                               len(stats['missing']) - 20)
 
     datasets = [build_dataset(cfg.data.train)]
     if len(cfg.workflow) == 2:

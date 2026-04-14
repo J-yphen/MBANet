@@ -1,3 +1,5 @@
 __pycache__/*
 .efficient_test/
 pretrain/model_best.pth.tar
+zerowaste_logs
+boundary_ppts.pdf
