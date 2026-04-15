@@ -44,6 +44,19 @@ class BoundaryEncoderDecoder(EncoderDecoder):
 
     def _boundary_aux_loss(self, gt_semantic_seg):
         backbone = self.backbone
+        target = self._compute_boundary_target(gt_semantic_seg)
+
+        # Preferred path for current COSNet: use stage boundary logits.
+        logits_store = getattr(backbone, 'latest_boundary_logits', None)
+        if logits_store is not None and self.boundary_stage_idx < len(logits_store):
+            stage_logits = logits_store[self.boundary_stage_idx]
+            if stage_logits is not None:
+                pred = torch.nan_to_num(stage_logits, nan=0.0, posinf=30.0, neginf=-30.0)
+                resized_target = F.interpolate(target, size=pred.shape[2:], mode='nearest')
+                loss = F.binary_cross_entropy_with_logits(pred, resized_target)
+                return loss * self.boundary_loss_weight
+
+        # Backward-compatible fallback for older multi-residual boundary stores.
         residual_store = getattr(backbone, 'latest_boundary_residuals', None)
         if residual_store is None:
             return None
@@ -62,8 +75,6 @@ class BoundaryEncoderDecoder(EncoderDecoder):
         # Concatenate per-scale residual maps along channel dimension.
         pred = torch.cat(residual_maps, dim=1)
         pred = torch.nan_to_num(pred, nan=0.0, posinf=30.0, neginf=-30.0)
-
-        target = self._compute_boundary_target(gt_semantic_seg)
         target = F.interpolate(target, size=pred.shape[2:], mode='nearest')
         target = target.expand(-1, pred.shape[1], -1, -1)
         target = target.clamp(0.0, 1.0)

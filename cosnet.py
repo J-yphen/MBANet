@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_
-from cosnet_modules import FSB, MBA, LayerNorm
+from cosnet_modules import FSB, BEM, LayerNorm
 from mmseg.models.builder import BACKBONES
 
 @BACKBONES.register_module()
@@ -41,10 +41,9 @@ class COSNet(nn.Module):
 
         # Apply boundary module only at Stage 3 (index 2), following architecture intent.
         self.boundary_stage_idx = 2
-        self.mba = MBA(self.dims[self.boundary_stage_idx])
+        self.bem = BEM(self.dims[self.boundary_stage_idx])
         self.boundary_head = nn.Conv2d(self.dims[self.boundary_stage_idx], 1, kernel_size=1, stride=1, padding=0)
         self.latest_boundary_logits = None
-        self.latest_boundary_residuals = None
 
         # self.norm = nn.LayerNorm(self.dims[-1], eps=1e-6)  # Final norm layer
         # self.head = nn.Linear(self.dims[-1], num_classes)
@@ -127,27 +126,20 @@ class COSNet(nn.Module):
     def forward_features(self, x):
         feats = []
         boundary_logits = [None] * self.num_stages
-        boundary_residuals = [None] * self.num_stages
         for i in range(self.num_stages):
             x = self.downsample_layers[i](x)
             x = self.stages[i](x)
 
             if i == self.boundary_stage_idx:
-                # Multi-scale boundary attention is only used at Stage 3.
-                mba_feat, mba_logit, mba_residuals = self.mba(x)
-                b_logit = self.boundary_head(mba_feat)
-                x = x + mba_feat * torch.sigmoid(b_logit)
+                # Original COSNet boundary enhancement module at Stage 3.
+                bem_feat = self.bem(x)
+                b_logit = self.boundary_head(bem_feat)
+                x = x + bem_feat * torch.sigmoid(b_logit)
                 boundary_logits[i] = b_logit
-                # Keep residuals/logits for optional auxiliary boundary supervision.
-                boundary_residuals[i] = {
-                    "scale_attention_logits": mba_logit,
-                    "residual_maps": mba_residuals,
-                }
 
             feats.append(x)
 
         self.latest_boundary_logits = boundary_logits
-        self.latest_boundary_residuals = boundary_residuals
 
         return feats
 

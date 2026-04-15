@@ -140,56 +140,20 @@ class MLP(nn.Module):
         return x
 
 
-class MBA(nn.Module):
-    def __init__(self, dim, pool_scales=(2, 4, 8)):
+class BEM(nn.Module):
+    def __init__(self, dim):
         super().__init__()
-        self.pool_scales = pool_scales
-
-        # Multi-scale low-pass subtraction branches.
-        self.edge_convs = nn.ModuleList([
-            nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=1, groups=dim, bias=False)
-            for _ in pool_scales
-        ])
-
-        # Predict per-scale attention from the feature map.
-        self.scale_attn = nn.Sequential(
-            nn.Conv2d(dim, dim, kernel_size=1, stride=1, padding=0, bias=False),
-            nn.GELU(),
-            nn.Conv2d(dim, len(pool_scales), kernel_size=1, stride=1, padding=0, bias=True),
-        )
-
-        self.ctx_conv = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=2, dilation=2, groups=dim, bias=False)
-        self.edge_gate = nn.Conv2d(dim, dim, kernel_size=1, stride=1, padding=0)
-        self.fuse = nn.Conv2d(dim * 3, dim, kernel_size=1, stride=1, padding=0, bias=False)
+        self.conv = nn.Conv2d(dim*2, dim, kernel_size=3, stride=1, padding=1)
         self.norm = LayerNorm(dim, eps=1e-6, data_format="channels_first")
         self.act = nn.GELU()
-
-    def _boundary_residual(self, x, scale):
-        k = max(2, int(scale))
-        low = F.avg_pool2d(x, kernel_size=k, stride=k)
-        low = F.interpolate(low, size=x.shape[2:], mode='bilinear', align_corners=False)
-        return x - low
+        self.pool = nn.MaxPool2d(kernel_size=4, stride=4)
 
     def forward(self, x):
-        residuals = []
-        for scale, conv in zip(self.pool_scales, self.edge_convs):
-            edge = self._boundary_residual(x, scale)
-            residuals.append(self.act(conv(edge)))
+        dx = self.pool(x)
+        ex = torch.nn.functional.interpolate(dx, size=x.shape[2:], mode='bilinear') - x
+        x = torch.cat([ex, x], dim=1)
+        x = self.conv(x)
+        x = self.act(x)
+        x = self.norm(x)
 
-        # [B, S, H, W], normalized across scales.
-        attn_logits = self.scale_attn(x)
-        attn = torch.softmax(attn_logits, dim=1)
-
-        stacked_edges = torch.stack(residuals, dim=1)  # [B, S, C, H, W]
-        weighted_edge = (stacked_edges * attn.unsqueeze(2)).sum(dim=1)
-
-        gate = torch.sigmoid(self.edge_gate(weighted_edge))
-        ctx = self.act(self.ctx_conv(x))
-
-        fused = torch.cat([x, ctx * gate, weighted_edge], dim=1)
-        out = self.fuse(fused)
-        out = self.act(out)
-        out = self.norm(out)
-
-        # Return boundary logits proxy for optional auxiliary boundary loss.
-        return out, attn_logits, residuals
+        return x
