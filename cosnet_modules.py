@@ -94,6 +94,9 @@ class FSB(nn.Module):
         self.mlp = MLP(dim=dim, mlp_ratio=expan_ratio)
         self.attn = MCFS(dim, s_kernel_size=s_kernel_size)
 
+        self.layer_scale_1 = nn.Parameter(layer_scale_init_value * torch.ones(dim))
+        self.layer_scale_2 = nn.Parameter(layer_scale_init_value * torch.ones(dim))
+
         self.drop_path_1 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.drop_path_2 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
@@ -107,11 +110,11 @@ class FSB(nn.Module):
 
         x_copy = x
         x = self.layer_norm_1(x_copy)
-        x = self.drop_path_1(self.attn(x))
+        x = self.drop_path_1(self.layer_scale_1[:, None, None] * self.attn(x))
         out = x + x_copy
 
         x = self.layer_norm_2(out)
-        x = self.drop_path_2(self.mlp(x))
+        x = self.drop_path_2(self.layer_scale_2[:, None, None] * self.mlp(x))
         out = out + x
 
         return out
@@ -137,33 +140,56 @@ class MLP(nn.Module):
         return x
 
 
-class BEM(nn.Module):
-    def __init__(self, dim):
+class MBA(nn.Module):
+    def __init__(self, dim, pool_scales=(2, 4, 8)):
         super().__init__()
-        # Boundary-guided feature aggregation:
-        # 1) Build boundary cues via low-frequency subtraction.
-        # 2) Gate contextual features using predicted boundary response.
-        # 3) Fuse identity, gated context, and boundary features.
-        self.edge_conv = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=1, groups=dim, bias=False)
-        self.edge_gate = nn.Conv2d(dim, dim, kernel_size=1, stride=1, padding=0)
+        self.pool_scales = pool_scales
+
+        # Multi-scale low-pass subtraction branches.
+        self.edge_convs = nn.ModuleList([
+            nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=1, groups=dim, bias=False)
+            for _ in pool_scales
+        ])
+
+        # Predict per-scale attention from the feature map.
+        self.scale_attn = nn.Sequential(
+            nn.Conv2d(dim, dim, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.GELU(),
+            nn.Conv2d(dim, len(pool_scales), kernel_size=1, stride=1, padding=0, bias=True),
+        )
+
         self.ctx_conv = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=2, dilation=2, groups=dim, bias=False)
+        self.edge_gate = nn.Conv2d(dim, dim, kernel_size=1, stride=1, padding=0)
         self.fuse = nn.Conv2d(dim * 3, dim, kernel_size=1, stride=1, padding=0, bias=False)
         self.norm = LayerNorm(dim, eps=1e-6, data_format="channels_first")
         self.act = nn.GELU()
-        self.pool = nn.AvgPool2d(kernel_size=4, stride=4)
+
+    def _boundary_residual(self, x, scale):
+        k = max(2, int(scale))
+        low = F.avg_pool2d(x, kernel_size=k, stride=k)
+        low = F.interpolate(low, size=x.shape[2:], mode='bilinear', align_corners=False)
+        return x - low
 
     def forward(self, x):
-        low = self.pool(x)
-        low = torch.nn.functional.interpolate(low, size=x.shape[2:], mode='bilinear', align_corners=False)
-        edge = x - low
+        residuals = []
+        for scale, conv in zip(self.pool_scales, self.edge_convs):
+            edge = self._boundary_residual(x, scale)
+            residuals.append(self.act(conv(edge)))
 
-        edge = self.act(self.edge_conv(edge))
-        gate = torch.sigmoid(self.edge_gate(edge))
+        # [B, S, H, W], normalized across scales.
+        attn_logits = self.scale_attn(x)
+        attn = torch.softmax(attn_logits, dim=1)
+
+        stacked_edges = torch.stack(residuals, dim=1)  # [B, S, C, H, W]
+        weighted_edge = (stacked_edges * attn.unsqueeze(2)).sum(dim=1)
+
+        gate = torch.sigmoid(self.edge_gate(weighted_edge))
         ctx = self.act(self.ctx_conv(x))
 
-        fused = torch.cat([x, ctx * gate, edge], dim=1)
+        fused = torch.cat([x, ctx * gate, weighted_edge], dim=1)
         out = self.fuse(fused)
         out = self.act(out)
         out = self.norm(out)
 
-        return out
+        # Return boundary logits proxy for optional auxiliary boundary loss.
+        return out, attn_logits, residuals

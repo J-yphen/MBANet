@@ -6,7 +6,11 @@ _base_ = [
 
 norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
-    type='EncoderDecoder',
+    type='BoundaryEncoderDecoder',
+    boundary_loss_weight=0.1,
+    boundary_dilation=2,
+    boundary_stage_idx=2,
+    boundary_ignore_index=255,
     pretrained='/home/mtech2025/Documents/project_CosNet/sdc1/cosnet/pretrain/model_best_fixed.pth',
     backbone=dict(
         type='COSNet',
@@ -30,7 +34,7 @@ model = dict(
             dropout_ratio=0.1,
             norm_cfg=norm_cfg,
             align_corners=False,
-            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.20)),
+            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, avg_non_ignore=True, loss_weight=0.20)),
         dict(
             type='FCNHead',
             num_classes=7,
@@ -42,7 +46,7 @@ model = dict(
             dropout_ratio=0.1,
             norm_cfg=norm_cfg,
             align_corners=False,
-            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.25)),
+            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, avg_non_ignore=True, loss_weight=0.25)),
         dict(
             type='FCNHead',
             num_classes=7,
@@ -54,7 +58,7 @@ model = dict(
             dropout_ratio=0.1,
             norm_cfg=norm_cfg,
             align_corners=False,
-            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.30)),
+            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, avg_non_ignore=True, loss_weight=0.30)),
     ]
 )
 

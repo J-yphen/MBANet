@@ -14,6 +14,7 @@ from mmseg.datasets import build_dataloader, build_dataset
 from mmseg.models import build_segmentor
 
 import cosnet
+import boundary_segmentor
 from align_resize import AlignResize
 from zerowaste import ZeroWasteDataset
 from specwaste import SpectralWasteDataset
