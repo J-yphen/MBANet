@@ -39,15 +39,9 @@ class COSNet(nn.Module):
             self.stages.append(nn.Sequential(*stage_blocks))
             cur += depths[i]
 
-        # Apply boundary module only at Stage 3 (index 2), following architecture intent.
-        self.boundary_stage_idx = 2
-        self.bem = BEM(self.dims[self.boundary_stage_idx])
-        self.boundary_head = nn.Conv2d(self.dims[self.boundary_stage_idx], 1, kernel_size=1, stride=1, padding=0)
-        self.latest_boundary_logits = None
-
         # self.norm = nn.LayerNorm(self.dims[-1], eps=1e-6)  # Final norm layer
         # self.head = nn.Linear(self.dims[-1], num_classes)
-        # self.hdr_layer = BEM(self.dims[-2])
+        self.hdr_layer = BEM(self.dims[-2])
 
         self.apply(self._init_weights)
 
@@ -125,21 +119,11 @@ class COSNet(nn.Module):
 
     def forward_features(self, x):
         feats = []
-        boundary_logits = [None] * self.num_stages
         for i in range(self.num_stages):
             x = self.downsample_layers[i](x)
             x = self.stages[i](x)
 
-            if i == self.boundary_stage_idx:
-                # Original COSNet boundary enhancement module at Stage 3.
-                bem_feat = self.bem(x)
-                b_logit = self.boundary_head(bem_feat)
-                x = x + bem_feat * torch.sigmoid(b_logit)
-                boundary_logits[i] = b_logit
-
             feats.append(x)
-
-        self.latest_boundary_logits = boundary_logits
 
         return feats
 
@@ -152,6 +136,13 @@ class COSNet(nn.Module):
         # return [f1, f2, f3, f4, f5]
 
         return [f1, f2, f3, f4]
+
+
+@BACKBONES.register_module()
+class SegNet(COSNet):
+    """Compatibility alias for configs that reference backbone type `SegNet`."""
+
+    pass
 
 
 

@@ -94,9 +94,6 @@ class FSB(nn.Module):
         self.mlp = MLP(dim=dim, mlp_ratio=expan_ratio)
         self.attn = MCFS(dim, s_kernel_size=s_kernel_size)
 
-        self.layer_scale_1 = nn.Parameter(layer_scale_init_value * torch.ones(dim))
-        self.layer_scale_2 = nn.Parameter(layer_scale_init_value * torch.ones(dim))
-
         self.drop_path_1 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.drop_path_2 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
@@ -110,11 +107,11 @@ class FSB(nn.Module):
 
         x_copy = x
         x = self.layer_norm_1(x_copy)
-        x = self.drop_path_1(self.layer_scale_1[:, None, None] * self.attn(x))
+        x = self.drop_path_1(self.attn(x))
         out = x + x_copy
 
         x = self.layer_norm_2(out)
-        x = self.drop_path_2(self.layer_scale_2[:, None, None] * self.mlp(x))
+        x = self.drop_path_2(self.mlp(x))
         out = out + x
 
         return out

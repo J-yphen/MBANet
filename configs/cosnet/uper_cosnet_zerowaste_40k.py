@@ -6,12 +6,8 @@ _base_ = [
 norm_cfg = dict(type='BN', requires_grad=True)
 # model settings
 model = dict(
-    type='BoundaryEncoderDecoder',
-    boundary_loss_weight=0.1,
-    boundary_dilation=2,
-    boundary_stage_idx=2,
-    boundary_ignore_index=255,
-    pretrained='/home/mtech2025/Documents/project_CosNet/sdc1/cosnet/pretrain/model_best_fixed.pth',
+    type='EncoderDecoder',
+    pretrained='/cosnet/pretrain/model_best.pth.tar',  # pretrain (imagenet) weight path 
     backbone=dict(
         type='COSNet',
         depths=[3, 3, 12, 3],
@@ -21,44 +17,10 @@ model = dict(
                      channels=256,
                      in_index=[0, 1, 2, 3],
                      norm_cfg=norm_cfg),
-    auxiliary_head=[
-        dict(
-            type='FCNHead',
-            num_classes=5,
-            in_channels=72,
-            in_index=0,
-            channels=64,
-            num_convs=1,
-            concat_input=False,
-            dropout_ratio=0.1,
-            norm_cfg=norm_cfg,
-            align_corners=False,
-                     loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, avg_non_ignore=True, loss_weight=0.20)),
-        dict(
-            type='FCNHead',
-            num_classes=5,
-            in_channels=72*2,
-            in_index=1,
-            channels=96,
-            num_convs=1,
-            concat_input=False,
-            dropout_ratio=0.1,
-            norm_cfg=norm_cfg,
-            align_corners=False,
-            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, avg_non_ignore=True, loss_weight=0.25)),
-        dict(
-            type='FCNHead',
-            num_classes=5,
-            in_channels=72*4,
-            in_index=2,
-            channels=128,
-            num_convs=1,
-            concat_input=False,
-            dropout_ratio=0.1,
-            norm_cfg=norm_cfg,
-            align_corners=False,
-            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, avg_non_ignore=True, loss_weight=0.30)),
-    ]
+    auxiliary_head=dict(num_classes=5,
+                        in_channels=72*4,
+                        in_index=2,         #in_index=4,
+                        norm_cfg=norm_cfg)
     )
 
 
