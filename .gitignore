@@ -1,8 +1,11 @@
 __pycache__/*
 .efficient_test/
-pretrain/model_best.pth.tar
+pretrain
 zerowaste_logs
 boundary_ppts.pdf
 spectralwaste_logs
 COSNet.pdf
 original_arch_spectralwaste_logs
+arch.md
+original_arch_zerowaste_logs
+result_models
