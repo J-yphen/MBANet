@@ -6,11 +6,20 @@ _base_ = [
 norm_cfg = dict(type='BN', requires_grad=True)
 # model settings
 model = dict(
-    type='EncoderDecoder',
-    pretrained='/cosnet/pretrain/model_best.pth.tar',
+    type='COSNetEncoderDecoder',
+    pretrained='',
+    combined_loss_cfg=dict(
+        lambda_bound=0.4,
+        lambda_scale=0.05,
+        dilation_r=3,
+        pos_weight=5.0,
+        ignore_index=255,
+    ),
     backbone=dict(
         type='SegNet',
         depths=[3, 3, 12, 3],
+        mba_pool_scales=(2, 4, 8),
+        mba_reduction=4,
         style='pytorch'),
     decode_head=dict(num_classes=7,
                      in_channels=[72, 72*2, 72*4, 72*8],

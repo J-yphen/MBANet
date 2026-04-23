@@ -9,3 +9,4 @@ original_arch_spectralwaste_logs
 arch.md
 original_arch_zerowaste_logs
 result_models
+models/__pycache__
