@@ -182,6 +182,8 @@ class CombinedLoss(nn.Module):
         seg_labels: torch.Tensor,
         boundary_logits: torch.Tensor = None,
         attn_logits: torch.Tensor = None,
+        lambda_bound: float = None,
+        lambda_scale: float = None,
     ):
         """
         Args:
@@ -189,12 +191,16 @@ class CombinedLoss(nn.Module):
             seg_labels      : (B, H, W) long
             boundary_logits : (B, 1, H, W) or (B, S, H, W) — optional
             attn_logits     : (B, S, H, W) — optional, for scale reg
+            lambda_bound    : override for boundary loss weight
+            lambda_scale    : override for scale regularization weight
 
         Returns:
             total_loss : scalar
             loss_dict  : dict with individual loss values for logging
         """
         loss_dict = {}
+        eff_lambda_bound = self.lambda_bound if lambda_bound is None else float(lambda_bound)
+        eff_lambda_scale = self.lambda_scale if lambda_scale is None else float(lambda_scale)
 
         # ── Segmentation CE ───────────────────────────────────────────────
         l_ce = self.ce_loss(seg_logits, seg_labels)
@@ -205,13 +211,15 @@ class CombinedLoss(nn.Module):
         if boundary_logits is not None:
             l_bound = self.boundary_loss(boundary_logits, seg_labels)
             loss_dict['boundary'] = l_bound.item()
-            total = total + self.lambda_bound * l_bound
+            total = total + eff_lambda_bound * l_bound
 
         # ── Scale entropy regularisation ──────────────────────────────────
         if attn_logits is not None:
             l_scale = self.scale_reg(attn_logits)
             loss_dict['scale_reg'] = l_scale.item()
-            total = total + self.lambda_scale * l_scale
+            total = total + eff_lambda_scale * l_scale
 
+        loss_dict['lambda_bound'] = eff_lambda_bound
+        loss_dict['lambda_scale'] = eff_lambda_scale
         loss_dict['total'] = total.item()
         return total, loss_dict

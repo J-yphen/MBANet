@@ -15,6 +15,17 @@ model = dict(
         pos_weight=5.0,
         ignore_index=255,
     ),
+    adaptive_boundary_cfg=dict(
+        enabled=True,
+        min_lambda_bound=0.20,
+        max_lambda_bound=0.50,
+        warmup_iters=12000,
+        plateau_window=400,
+        plateau_delta=5e-4,
+        plateau_boost=0.01,
+        max_plateau_boost=0.12,
+        decay_on_improve=0.5,
+    ),
     backbone=dict(
         type='COSNet',
         depths=[3, 3, 12, 3],
