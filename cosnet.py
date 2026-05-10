@@ -127,13 +127,15 @@ class COSNet(nn.Module):
 
         # ── OLD: return [f1, f2, f3, f4]
         # ── NEW: apply MBA to f3 (Stage 3), same as original BEM position
-        f3_enhanced, attn_logits, residuals = self.hdr_layer(f3)
+        f3_enhanced, attn_logits, residuals, boundary_logits = self.hdr_layer(f3)
 
         # Store auxiliary outputs as instance attributes so the
         # decode head / loss can read them without changing the
         # return signature (decoder still sees 4 feature maps).
-        self.boundary_attn_logits = attn_logits   # (B, S, H, W)
-        self.boundary_residuals   = residuals      # list of S × (B,C,H,W)
+        self.boundary_logits      = boundary_logits  # (B, 1, H, W)
+        self.attn_logits          = attn_logits      # (B, S, H, W)
+        self.boundary_attn_logits = attn_logits      # (B, S, H, W) compat
+        self.boundary_residuals   = residuals        # list of S × (B,C,H,W)
 
         return [f1, f2, f3_enhanced, f4]
 
@@ -171,7 +173,8 @@ if __name__ == "__main__":
         print(f"  {name}: {feat.shape}")
 
     # ── Auxiliary outputs ─────────────────────────────────────────────────
-    print(f"  attn_logits : {model.boundary_attn_logits.shape}")
+    print(f"  attn_logits : {model.attn_logits.shape}")
+    print(f"  boundary    : {model.boundary_logits.shape}")
     print(f"  residuals   : {len(model.boundary_residuals)} × {model.boundary_residuals[0].shape}")
 
     # ── FLOPs ─────────────────────────────────────────────────────────────

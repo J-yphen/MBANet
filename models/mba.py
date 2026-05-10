@@ -92,6 +92,9 @@ class MBA(nn.Module):
         # Gating: modulate context by edge confidence
         self.edge_gate = nn.Conv2d(dim, dim, kernel_size=1)
 
+        # Boundary prediction head (trained with BCE against GT edges)
+        self.boundary_head = nn.Conv2d(dim, 1, kernel_size=1, bias=True)
+
         # ------------------------------------------------------------------
         # Fusion: cat(x, gated_ctx, weighted_edge) → dim
         # ------------------------------------------------------------------
@@ -113,6 +116,8 @@ class MBA(nn.Module):
         nn.init.constant_(self.fuse[0].weight, 0)
         nn.init.constant_(self.edge_gate.bias,  0)
         nn.init.constant_(self.edge_gate.weight, 0)
+        nn.init.zeros_(self.boundary_head.weight)
+        nn.init.zeros_(self.boundary_head.bias)
         for m in self.modules():
             if isinstance(m, nn.BatchNorm2d):
                 nn.init.ones_(m.weight)
@@ -143,6 +148,7 @@ class MBA(nn.Module):
             out            : (B, C, H, W)  — enhanced feature map
             attn_logits    : (B, S, H, W)  — raw scale attention (for aux loss)
             residuals      : list of S tensors (B, C, H, W) — per-scale edges
+            boundary_logits: (B, 1, H, W)  — boundary prediction logits
         """
         B, C, H, W = x.shape
 
@@ -163,6 +169,9 @@ class MBA(nn.Module):
         # attn unsqueeze: (B, S, 1, H, W) → broadcast over C
         weighted_edge = (stacked * attn.unsqueeze(2)).sum(dim=1)  # (B,C,H,W)
 
+        # Boundary logits are predicted from the aggregated edge map
+        boundary_logits = self.boundary_head(weighted_edge)       # (B,1,H,W)
+
         # ── Step 4: dilated context + edge-conditioned gate ───────────────
         ctx  = self.act(self.ctx_conv(x))                   # (B,C,H,W)
         gate = torch.sigmoid(self.edge_gate(weighted_edge)) # (B,C,H,W) ∈(0,1)
@@ -172,4 +181,4 @@ class MBA(nn.Module):
         out   = self.act(self.fuse(fused))                  # (B,C,H,W)
         out   = self.norm(out)
 
-        return out, attn_logits, residuals
+        return out, attn_logits, residuals, boundary_logits

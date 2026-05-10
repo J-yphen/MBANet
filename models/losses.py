@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -109,34 +110,28 @@ class BoundaryLoss(nn.Module):
 # ---------------------------------------------------------------------------
 class ScaleRegLoss(nn.Module):
     """
-    Entropy regulariser on scale attention logits.
-    Prevents all attention collapsing to one scale (degenerate solution).
-
-    Maximises entropy of the attention distribution → encourages the network
-    to genuinely use multiple scales rather than ignoring S-1 of them.
-
-    Loss = -mean(entropy(softmax(attn_logits, dim=1)))
-
-    Args:
-        None
+    Penalises deviation from a target entropy level for scale attention.
+    This avoids both one-hot collapse and uniform attention.
     """
 
-    def __init__(self):
+    def __init__(self, target_ratio: float = 0.5):
         super().__init__()
+        self.target_ratio = float(target_ratio)
 
     def forward(self, attn_logits: torch.Tensor) -> torch.Tensor:
         """
         Args:
             attn_logits : (B, S, H, W)
         Returns:
-            loss : scalar — negative entropy (minimising this maximises entropy)
+            loss : scalar — squared deviation from target entropy
         """
-        # Softmax over scale dim
-        attn = torch.softmax(attn_logits, dim=1)        # (B, S, H, W)
-        # Entropy: -sum(p * log(p + eps)) over scale dim
+        S = attn_logits.shape[1]
+        max_ent = math.log(float(S))
+        target = self.target_ratio * max_ent
+
+        attn = torch.softmax(attn_logits, dim=1)             # (B, S, H, W)
         entropy = -(attn * torch.log(attn + 1e-8)).sum(dim=1)  # (B, H, W)
-        # We MAXIMISE entropy → loss = NEGATIVE entropy
-        loss = -entropy.mean()
+        loss = (entropy.mean() - target).pow(2)
         return loss
 
 

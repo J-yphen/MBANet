@@ -111,8 +111,10 @@ class COSNetEncoderDecoder(EncoderDecoder):
 
         seg_labels = gt_semantic_seg.squeeze(1).long()
 
-        boundary_logits = getattr(self.backbone, 'boundary_attn_logits', None)
-        attn_logits = getattr(self.backbone, 'boundary_attn_logits', None)
+        boundary_logits = getattr(self.backbone, 'boundary_logits', None)
+        attn_logits = getattr(self.backbone, 'attn_logits', None)
+        if attn_logits is None:
+            attn_logits = getattr(self.backbone, 'boundary_attn_logits', None)
         dynamic_lambda_bound = self._compute_dynamic_lambda_bound()
 
         total_loss, loss_dict = self.combined_loss(
