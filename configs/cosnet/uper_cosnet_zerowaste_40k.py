@@ -11,8 +11,10 @@ model = dict(
     combined_loss_cfg=dict(
         lambda_bound=0.4,
         lambda_scale=0.02,
+        lambda_dice=0.5,
+        lambda_lovasz=0.75,
         dilation_r=3,
-        pos_weight=5.0,
+        pos_weight=3.0,
         ignore_index=255,
     ),
     adaptive_boundary_cfg=dict(

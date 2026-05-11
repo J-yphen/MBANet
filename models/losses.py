@@ -136,17 +136,121 @@ class ScaleRegLoss(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# 3. Combined Loss (drop-in replacement for COSNet's criterion)
+# 3. Dice Loss (foreground only)
+# ---------------------------------------------------------------------------
+class DiceLoss(nn.Module):
+    """
+    Soft Dice loss averaged over foreground classes (skips background).
+    """
+
+    def __init__(self, num_classes: int, ignore_index: int = 255, smooth: float = 1.0):
+        super().__init__()
+        self.num_classes = num_classes
+        self.ignore_index = ignore_index
+        self.smooth = float(smooth)
+
+    def forward(self, seg_logits: torch.Tensor, seg_labels: torch.Tensor) -> torch.Tensor:
+        probs = torch.softmax(seg_logits, dim=1)  # (B, C, H, W)
+        valid = (seg_labels != self.ignore_index)
+        total = 0.0
+
+        for c in range(1, self.num_classes):
+            gt_c = ((seg_labels == c) & valid).float().reshape(-1)
+            pr_c = probs[:, c].reshape(-1)
+            mask = valid.reshape(-1)
+
+            inter = (pr_c[mask] * gt_c[mask]).sum()
+            denom = pr_c[mask].sum() + gt_c[mask].sum()
+            total += 1.0 - (2.0 * inter + self.smooth) / (denom + self.smooth)
+
+        return total / float(self.num_classes - 1)
+
+
+# ---------------------------------------------------------------------------
+# 4. Lovasz-Softmax Loss
+# ---------------------------------------------------------------------------
+def _lovasz_grad(gt_sorted: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the gradient of the Lovasz extension of the IoU loss
+    for a sorted error vector.
+    """
+    p = len(gt_sorted)
+    gts = gt_sorted.sum()
+    intersection = gts - gt_sorted.float().cumsum(0)
+    union = gts + (1 - gt_sorted).float().cumsum(0)
+    iou = 1.0 - intersection / union
+    if p > 1:
+        iou[1:p] = iou[1:p] - iou[0:-1]
+    return iou
+
+
+class LovaszSoftmax(nn.Module):
+    """
+    Lovasz-Softmax loss for multi-class segmentation.
+    """
+
+    def __init__(self, classes: str = 'present', ignore_index: int = 255):
+        super().__init__()
+        self.classes = classes
+        self.ignore_index = ignore_index
+
+    def _lovasz_softmax_flat(
+        self,
+        probs: torch.Tensor,   # (P, C)
+        labels: torch.Tensor,  # (P,)
+    ) -> torch.Tensor:
+        C = probs.shape[1]
+        losses = []
+        present = labels.unique()
+
+        for c in range(C):
+            if self.classes == 'present' and c not in present:
+                continue
+            fg = (labels == c).float()
+            if fg.sum() == 0:
+                continue
+            errs = (fg - probs[:, c]).abs()
+            errs_sorted, perm = torch.sort(errs, dim=0, descending=True)
+            fg_sorted = fg[perm]
+            losses.append(torch.dot(errs_sorted, _lovasz_grad(fg_sorted)))
+
+        if not losses:
+            return probs.sum() * 0.0
+        return torch.stack(losses).mean()
+
+    def forward(
+        self,
+        seg_logits: torch.Tensor,  # (B, C, H, W)
+        seg_labels: torch.Tensor,  # (B, H, W)
+    ) -> torch.Tensor:
+        probs = torch.softmax(seg_logits, dim=1)
+        B, C, H, W = probs.shape
+
+        probs_flat = probs.permute(0, 2, 3, 1).reshape(-1, C)
+        labels_flat = seg_labels.reshape(-1)
+
+        valid = labels_flat != self.ignore_index
+        probs_flat = probs_flat[valid]
+        labels_flat = labels_flat[valid]
+
+        return self._lovasz_softmax_flat(probs_flat, labels_flat)
+
+
+# ---------------------------------------------------------------------------
+# 5. Combined Loss (drop-in replacement for COSNet's criterion)
 # ---------------------------------------------------------------------------
 class CombinedLoss(nn.Module):
     """
     Combines:
-        L_total = L_CE + λ_bound * L_boundary + λ_scale * L_scale_reg
+        L_total = L_CE + λ_dice * L_dice + λ_lovasz * L_lovasz
+                  + λ_bound * L_boundary + λ_scale * L_scale_reg
 
     Args:
         num_classes    : number of segmentation classes
         lambda_bound   : weight for boundary loss (0.4 is a safe start)
         lambda_scale   : weight for scale entropy reg (0.05)
+        lambda_dice    : weight for Dice loss (0.5)
+        lambda_lovasz  : weight for Lovasz-Softmax loss (0.75)
         dilation_r     : GT boundary dilation radius
         pos_weight     : BCE positive class weight
         ignore_index   : label index to ignore in CE (default 255)
@@ -157,15 +261,21 @@ class CombinedLoss(nn.Module):
         num_classes: int,
         lambda_bound: float = 0.4,
         lambda_scale: float = 0.05,
+        lambda_dice: float = 0.5,
+        lambda_lovasz: float = 0.75,
         dilation_r: int = 3,
-        pos_weight: float = 5.0,
+        pos_weight: float = 3.0,
         ignore_index: int = 255,
     ):
         super().__init__()
         self.lambda_bound = lambda_bound
         self.lambda_scale = lambda_scale
+        self.lambda_dice = lambda_dice
+        self.lambda_lovasz = lambda_lovasz
 
         self.ce_loss = nn.CrossEntropyLoss(ignore_index=ignore_index)
+        self.dice_loss = DiceLoss(num_classes=num_classes, ignore_index=ignore_index)
+        self.lovasz = LovaszSoftmax(classes='present', ignore_index=ignore_index)
         self.boundary_loss = BoundaryLoss(
             dilation_r=dilation_r, pos_weight=pos_weight
         )
@@ -201,6 +311,16 @@ class CombinedLoss(nn.Module):
         l_ce = self.ce_loss(seg_logits, seg_labels)
         loss_dict['ce'] = l_ce.item()
         total = l_ce
+
+        # ── Dice loss (foreground only) ──────────────────────────────────
+        l_dice = self.dice_loss(seg_logits, seg_labels)
+        loss_dict['dice'] = l_dice.item()
+        total = total + self.lambda_dice * l_dice
+
+        # ── Lovasz-Softmax loss ─────────────────────────────────────────
+        l_lovasz = self.lovasz(seg_logits, seg_labels)
+        loss_dict['lovasz'] = l_lovasz.item()
+        total = total + self.lambda_lovasz * l_lovasz
 
         # ── Boundary loss ─────────────────────────────────────────────────
         if boundary_logits is not None:

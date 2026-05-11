@@ -47,9 +47,11 @@ class MBA(nn.Module):
         dim: int,
         pool_scales: tuple = (2, 4, 8),
         reduction: int = 4,
+        detach_boundary: bool = True,
     ):
         super().__init__()
         self.pool_scales = pool_scales
+        self.detach_boundary = bool(detach_boundary)
         S = len(pool_scales)
 
         # ------------------------------------------------------------------
@@ -170,7 +172,8 @@ class MBA(nn.Module):
         weighted_edge = (stacked * attn.unsqueeze(2)).sum(dim=1)  # (B,C,H,W)
 
         # Boundary logits are predicted from the aggregated edge map
-        boundary_logits = self.boundary_head(weighted_edge)       # (B,1,H,W)
+        boundary_input = weighted_edge.detach() if self.detach_boundary else weighted_edge
+        boundary_logits = self.boundary_head(boundary_input)      # (B,1,H,W)
 
         # ── Step 4: dilated context + edge-conditioned gate ───────────────
         ctx  = self.act(self.ctx_conv(x))                   # (B,C,H,W)
@@ -180,5 +183,6 @@ class MBA(nn.Module):
         fused = torch.cat([x, ctx * gate, weighted_edge], dim=1)  # (B,3C,H,W)
         out   = self.act(self.fuse(fused))                  # (B,C,H,W)
         out   = self.norm(out)
+        out   = out + x
 
         return out, attn_logits, residuals, boundary_logits

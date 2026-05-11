@@ -130,6 +130,8 @@ class COSNetEncoderDecoder(EncoderDecoder):
 
         losses['loss_decode'] = total_loss
         losses['decode_ce'] = total_loss.new_tensor(loss_dict.get('ce', 0.0)).detach()
+        losses['decode_dice'] = total_loss.new_tensor(loss_dict.get('dice', 0.0)).detach()
+        losses['decode_lovasz'] = total_loss.new_tensor(loss_dict.get('lovasz', 0.0)).detach()
         losses['decode_boundary'] = total_loss.new_tensor(loss_dict.get('boundary', 0.0)).detach()
         losses['decode_scale_reg'] = total_loss.new_tensor(loss_dict.get('scale_reg', 0.0)).detach()
         losses['decode_lambda_bound'] = total_loss.new_tensor(
