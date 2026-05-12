@@ -31,7 +31,7 @@ model = dict(
     backbone=dict(
         type='COSNet',
         depths=[3, 3, 12, 3],
-        mba_pool_scales=(2, 4, 8),
+        mba_pool_scales=(1, 2, 4),
         mba_reduction=4,
         style='pytorch'),
     decode_head=dict(num_classes=5,

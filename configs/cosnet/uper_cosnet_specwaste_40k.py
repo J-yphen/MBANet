@@ -7,7 +7,7 @@ norm_cfg = dict(type='BN', requires_grad=True)
 # model settings
 model = dict(
     type='COSNetEncoderDecoder',
-    pretrained='',
+    pretrained='',  # pretrain (imagenet) weight path 
     combined_loss_cfg=dict(
         lambda_bound=0.4,
         lambda_scale=0.02,
@@ -17,10 +17,21 @@ model = dict(
         pos_weight=3.0,
         ignore_index=255,
     ),
+    adaptive_boundary_cfg=dict(
+        enabled=True,
+        min_lambda_bound=0.20,
+        max_lambda_bound=0.50,
+        warmup_iters=12000,
+        plateau_window=400,
+        plateau_delta=5e-4,
+        plateau_boost=0.01,
+        max_plateau_boost=0.12,
+        decay_on_improve=0.5,
+    ),
     backbone=dict(
-        type='SegNet',
+        type='COSNet',
         depths=[3, 3, 12, 3],
-        mba_pool_scales=(2, 4, 8),
+        mba_pool_scales=(1, 2, 4),
         mba_reduction=4,
         style='pytorch'),
     decode_head=dict(num_classes=7,
