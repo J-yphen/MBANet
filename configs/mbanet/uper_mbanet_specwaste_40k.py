@@ -6,7 +6,7 @@ _base_ = [
 norm_cfg = dict(type='BN', requires_grad=True)
 # model settings
 model = dict(
-    type='COSNetEncoderDecoder',
+    type='MBANetEncoderDecoder',
     pretrained='',  # pretrain (imagenet) weight path 
     combined_loss_cfg=dict(
         lambda_bound=0.4,
@@ -29,7 +29,7 @@ model = dict(
         decay_on_improve=0.5,
     ),
     backbone=dict(
-        type='COSNet',
+        type='MBANet',
         depths=[3, 3, 12, 3],
         mba_pool_scales=(1, 2, 4),
         mba_reduction=4,

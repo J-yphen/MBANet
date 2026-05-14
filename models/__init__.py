@@ -1,6 +1,6 @@
 from .mba import MBA
 from .losses import BoundaryLoss, CombinedLoss, DiceLoss, LovaszSoftmax, ScaleRegLoss, build_gt_edge_mask
-from .segmentors import COSNetEncoderDecoder
+from .segmentors import MBANetEncoderDecoder
 
 __all__ = [
     "MBA",
@@ -10,5 +10,5 @@ __all__ = [
     "LovaszSoftmax",
     "ScaleRegLoss",
     "CombinedLoss",
-    "COSNetEncoderDecoder",
+    "MBANetEncoderDecoder",
 ]

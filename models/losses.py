@@ -237,7 +237,7 @@ class LovaszSoftmax(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# 5. Combined Loss (drop-in replacement for COSNet's criterion)
+# 5. Combined Loss (drop-in replacement for MBANet's criterion)
 # ---------------------------------------------------------------------------
 class CombinedLoss(nn.Module):
     """

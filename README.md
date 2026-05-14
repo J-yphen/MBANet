@@ -1,6 +1,6 @@
-# MBANet (COSNet + MBA)
+# MBANet
 
-This repository contains MBANet, a semantic segmentation project that combines a COSNet-style backbone with Multi-Scale Boundary Attention (MBA) and a boundary-aware combined loss, built on top of MMsegmentation.
+This repository contains MBANet, a semantic segmentation project that uses a MBANet backbone with Multi-Scale Boundary Attention (MBA) and a boundary-aware combined loss, built on top of MMsegmentation.
 
 ## Environment setup
 
@@ -16,7 +16,7 @@ pip install mmcv-full==1.7.1 -f https://download.openmmlab.com/mmcv/dist/cu117/t
 pip install mmengine==0.10.7 mmsegmentation==0.30.0
 ```
 
-Other imports used in the code include `timm`, `numpy`, `opencv-python`, and `fvcore` (only for the optional FLOPs check in `cosnet.py` when running it as a script). Install them if needed.
+Other imports used in the code include `timm`, `numpy`, `opencv-python`, and `fvcore` (only for the optional FLOPs check in `mbanet.py` when running it as a script). Install them if needed.
 
 ## Datasets
 
@@ -66,13 +66,13 @@ The dataset class is `SpectralWasteDataset` in [specwaste.py](specwaste.py) and 
 Example: ZeroWaste (single GPU)
 
 ```bash
-python train.py configs/cosnet/uper_cosnet_zerowaste_40k.py --work-dir zerowaste_logs
+python train.py configs/mbanet/uper_mbanet_zerowaste_40k.py --work-dir zerowaste_logs
 ```
 
 Example: SpectralWaste (single GPU)
 
 ```bash
-python train.py configs/cosnet/uper_cosnet_specwaste_40k.py --work-dir spectralwaste_logs
+python train.py configs/mbanet/uper_mbanet_specwaste_40k.py --work-dir spectralwaste_logs
 ```
 
 Notes:
@@ -87,7 +87,7 @@ Notes:
 Example:
 
 ```bash
-python test.py configs/cosnet/uper_cosnet_zerowaste_40k.py /path/to/checkpoint.pth --eval mIoU
+python test.py configs/mbanet/uper_mbanet_zerowaste_40k.py /path/to/checkpoint.pth --eval mIoU
 ```
 
 Optional flags (see [test.py](test.py)):
@@ -103,7 +103,7 @@ Example:
 
 ```bash
 python generate_segmentation.py \
-  --config configs/cosnet/uper_cosnet_zerowaste_40k.py \
+  --config configs/mbanet/uper_mbanet_zerowaste_40k.py \
   --checkpoint /path/to/checkpoint.pth \
   --image /path/to/image.png \
   --out-dir outputs

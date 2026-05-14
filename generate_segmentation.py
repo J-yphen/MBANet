@@ -13,31 +13,27 @@ from mmseg.datasets import build_dataset
 
 def _load_module_root(config_path):
     config_path = str(config_path)
-    if "/prog_lab_cosnet/" in config_path:
-        return "prog_lab_cosnet"
-    if "/cosnet/" in config_path:
-        return "cosnet"
-    raise ValueError(
-        "Unable to detect model root from config path. "
-        "Expected config under /prog_lab_cosnet/ or /cosnet/."
-    )
+    if "/prog_lab_mbanet/" in config_path:
+        return "prog_lab_mbanet"
+    if "/mbanet/" in config_path:
+        return None
+    return None
 
 
 def _register_custom_modules(project_root, module_root):
-    module_path = project_root / module_root
+    module_path = project_root if module_root is None else project_root / module_root
+    if not module_path.exists():
+        module_path = project_root
     sys.path.insert(0, str(module_path))
 
     # Dataset + pipeline components.
     import align_resize  # noqa: F401
     import zerowaste  # noqa: F401
+    import specwaste  # noqa: F401
 
-    if module_root == "prog_lab_cosnet":
-        # Custom segmentor + MBA backbone.
-        import models  # noqa: F401
-        import cosnet  # noqa: F401
-    else:
-        # COSNet baseline backbone.
-        import cosnet  # noqa: F401
+    # Custom segmentor + MBANet backbone.
+    import models  # noqa: F401
+    import mbanet  # noqa: F401
 
 
 

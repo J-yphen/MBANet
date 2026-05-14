@@ -13,7 +13,7 @@ from mmseg.apis import multi_gpu_test, single_gpu_test
 from mmseg.datasets import build_dataloader, build_dataset
 from mmseg.models import build_segmentor
 
-import cosnet
+import mbanet
 import models
 from align_resize import AlignResize
 from zerowaste import ZeroWasteDataset
@@ -237,7 +237,7 @@ def main():
         distributed = True
         init_dist(args.launcher, **cfg.dist_params)
 
-    result = run_eval_once(cfg, args.checkpoint, args, distributed, tag='CosNet')
+    result = run_eval_once(cfg, args.checkpoint, args, distributed, tag='MBANet')
 
     rank, _ = get_dist_info()
     if rank == 0:
@@ -260,7 +260,7 @@ def main():
         print('| Model   | Params (M)   | Encoder Params (M)  | mIoU (%)            | Avg Pixel Acc (%)   |')
         print('+---------+--------------+---------------------+---------------------+---------------------+')
         print(
-            f"| CosNet  | {result['total_params'] / 1e6:>12.2f} | "
+            f"| MBANet  | {result['total_params'] / 1e6:>12.2f} | "
             f"{result['encoder_params'] / 1e6:>19.2f} | "
             f"{result['metrics']['miou']:>19.2f} | "
             f"{result['metrics']['macc']:>19.2f} |"

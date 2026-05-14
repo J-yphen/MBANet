@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_
-from cosnet_modules import FSB, LayerNorm
+from mbanet_modules import FSB, LayerNorm
 from mmseg.models.builder import BACKBONES
 
 # ── NEW: import MBA ──────────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ from models.mba import MBA
 
 
 @BACKBONES.register_module()
-class COSNet(nn.Module):
+class MBANet(nn.Module):
     def __init__(self, in_chans=3, num_classes=1000, img_size=224,
                  depths=[3, 3, 12, 3], dim=72, expan_ratio=4, num_stages=4,
                  s_kernel_size=[5, 5, 3, 3], drop_path_rate=0.2,
@@ -141,14 +141,14 @@ class COSNet(nn.Module):
 
 
 @BACKBONES.register_module()
-class SegNet(COSNet):
+class SegNet(MBANet):
     """Compatibility alias for configs that reference backbone type `SegNet`."""
     pass
 
 
 ###############################################################################
 if __name__ == "__main__":
-    model = COSNet(
+    model = MBANet(
         in_chans=3, num_classes=1000, img_size=224,
         depths=[3, 3, 12, 3], dim=72, expan_ratio=4, num_stages=4,
         s_kernel_size=[5, 5, 3, 3], drop_path_rate=0.2,

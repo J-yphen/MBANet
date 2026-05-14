@@ -72,8 +72,8 @@ class MCFS(nn.Module):
 
 class FSB(nn.Module):
     """
-    Feature Sharpening Block: 
-    It is the core block of the COSNet encoder/backbone,
+    Feature Sharpening Block:
+    It is the core block of the MBANet encoder/backbone,
     utilized to extract semantically rich features for segementation task in cluttered background.
     -----------------------------------------------
     dim:           Input channel dimension

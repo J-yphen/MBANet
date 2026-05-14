@@ -6,7 +6,7 @@ from .losses import CombinedLoss
 
 
 @SEGMENTORS.register_module()
-class COSNetEncoderDecoder(EncoderDecoder):
+class MBANetEncoderDecoder(EncoderDecoder):
     """EncoderDecoder variant that adds CombinedLoss with backbone boundary outputs."""
 
     def __init__(self,
