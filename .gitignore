@@ -7,3 +7,6 @@ result_models
 models/__pycache__
 paper
 *.pth
+zerowaste_logs/ablations
+ablation_eval.py
+run_ablation_train.sh
