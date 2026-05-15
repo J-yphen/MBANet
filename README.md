@@ -2,6 +2,18 @@
 
 This repository contains MBANet, a semantic segmentation project that uses a MBANet backbone with Multi-Scale Boundary Attention (MBA) and a boundary-aware combined loss, built on top of MMsegmentation.
 
+## Visual comparison
+
+| (a) Input | (b) COSNet | (c) MBANet | (d) Ground Truth |
+| :---: | :---: | :---: | :---: |
+| <img src="images/Seg/1.%20input.png" width="100%"> | <img src="images/Seg/1.%20cosnet_pred_overlay.png" width="100%"> | <img src="images/Seg/1.%20ours_pred_overlay.png" width="100%"> | <img src="images/Seg/1.%20ours_gt_overlay.png" width="100%"> |
+| <img src="images/Seg/2.%20input.png" width="100%"> | <img src="images/Seg/2.%20cosnet_pred_overlay.png" width="100%"> | <img src="images/Seg/2.%20ours_pred_overlay.png" width="100%"> | <img src="images/Seg/2.%20ours_gt_overlay.png" width="100%"> |
+| <img src="images/Seg/3.%20input.png" width="100%"> | <img src="images/Seg/3.%20cosnet_pred_overlay.png" width="100%"> | <img src="images/Seg/3.%20ours_pred_overlay.png" width="100%"> | <img src="images/Seg/3.%20ours_gt_overlay.png" width="100%"> |
+
+<p align="center">
+  <em><b>Qualitative comparison on ZeroWaste-f.</b> Each row shows an input image, COSNet overlay, MBANet overlay, and ground-truth overlay. MBANet yields cleaner metal and rigid-plastic boundaries, reduces fragmented masks in clutter, and better aligns with thin structures.</em>
+</p>
+
 ## Environment setup
 
 The project expects Python 3.8 and the MMsegmentation 0.30.x stack. The commands below match the versions used in the codebase:
