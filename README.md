@@ -14,6 +14,17 @@ This repository contains MBANet, a semantic segmentation project that uses a MBA
   <em><b>Qualitative comparison on ZeroWaste-f.</b> Each row shows an input image, COSNet overlay, MBANet overlay, and ground-truth overlay. MBANet yields cleaner metal and rigid-plastic boundaries, reduces fragmented masks in clutter, and better aligns with thin structures.</em>
 </p>
 
+## Pretrained Weights
+
+We provide pretrained weights for MBANet trained on the ZeroWaste-f and SpectralWaste datasets. You can use these checkpoints for evaluation or as a starting point for fine-tuning on custom datasets.
+
+| Dataset | Config | mIoU | Checkpoint |
+| :--- | :--- | :---: | :---: |
+| **ZeroWaste-f** | `uper_mbanet_zerowaste_40k.py` | 57.65% | [Download Link](https://huggingface.co/J-yphen/MBANet/blob/main/mbanet_zerowaste_best_mIoU_iter_16000.pth) |
+| **SpectralWaste** | `uper_mbanet_specwaste_40k.py` | 73.75% | [Download Link](https://huggingface.co/J-yphen/MBANet/blob/main/mbanet_spectralwaste_best_mIoU_iter_32000.pth) |
+
+*Note: Be sure to replace the `00.0%` with your actual metrics and update the `[Download Link](#)` with the actual URLs to your hosted weights.*
+
 ## Environment setup
 
 The project expects Python 3.8 and the MMsegmentation 0.30.x stack. The commands below match the versions used in the codebase:
